@@ -32,12 +32,12 @@ open class BarChartData: BarLineScatterCandleBubbleChartData
     /// IT1-1452: Bars corners radius
     ///
     /// **default**: 0
-    open var barCornerRadius = Double(0)
+    @objc open var barCornerRadius = Double(0)
     
     /// IT1-1452: Stacked bars separator height in points
     ///
     /// **default**: 0
-    open var barSeparatorHeight = Double(0)
+    @objc open var barSeparatorHeight = Double(0)
     
     /// Groups all BarDataSet objects this data object holds together by modifying the x-value of their entries.
     /// Previously set x-values of entries will be overwritten. Leaves space between bars and groups as specified by the parameters.
