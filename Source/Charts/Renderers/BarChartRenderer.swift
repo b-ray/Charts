@@ -21,6 +21,8 @@ open class BarChartRenderer: BarLineScatterCandleBubbleRenderer
     fileprivate class Buffer
     {
         var rects = [CGRect]()
+        var firstRectsIndexes = [Int]()
+        var lastRectsIndexes = [Int]()
     }
     
     open weak var dataProvider: BarChartDataProvider?
@@ -132,6 +134,9 @@ open class BarChartRenderer: BarLineScatterCandleBubbleRenderer
                 var negY = -e.negativeSum
                 var yStart = 0.0
                 
+                var firstIndex = -1
+                var lastIndex = -1
+                
                 // fill the stack
                 for k in 0 ..< vals!.count
                 {
@@ -174,9 +179,21 @@ open class BarChartRenderer: BarLineScatterCandleBubbleRenderer
                     barRect.origin.y = top
                     barRect.size.height = bottom - top
                     
+                    // IT1-1452: Finding indexes of first and last rects in stack
+                    if value != 0.0 {
+                        if firstIndex == -1 {
+                            firstIndex = bufferIndex
+                        }
+                        lastIndex = bufferIndex
+                    }
+                    
                     buffer.rects[bufferIndex] = barRect
                     bufferIndex += 1
                 }
+                
+                // IT1-1452: Registering indexes of first and last rects in stack
+                buffer.firstRectsIndexes.append(firstIndex)
+                buffer.lastRectsIndexes.append(lastIndex)
             }
         }
     }
@@ -261,7 +278,7 @@ open class BarChartRenderer: BarLineScatterCandleBubbleRenderer
                 _barShadowRectBuffer.size.height = viewPortHandler.contentHeight
                 
                 context.setFillColor(dataSet.barShadowColor.cgColor)
-                context.fill(_barShadowRectBuffer)
+                drawBarRect(context, barRect: _barShadowRectBuffer, buffer: nil, dataSet: dataSet) // IT1-1452
             }
         }
         
@@ -285,7 +302,7 @@ open class BarChartRenderer: BarLineScatterCandleBubbleRenderer
                 }
                 
                 context.setFillColor(dataSet.barShadowColor.cgColor)
-                context.fill(barRect)
+                drawBarRect(context, barRect: barRect, buffer:buffer, dataSet: dataSet) // IT1-1452
             }
         }
         
@@ -316,14 +333,7 @@ open class BarChartRenderer: BarLineScatterCandleBubbleRenderer
                 context.setFillColor(dataSet.color(atIndex: j).cgColor)
             }
             
-            context.fill(barRect)
-            
-            if drawBorder
-            {
-                context.setStrokeColor(borderColor.cgColor)
-                context.setLineWidth(borderWidth)
-                context.stroke(barRect)
-            }
+            drawBarRect(context, barRect: barRect, buffer: buffer, dataSet: dataSet, drawBorder: drawBorder) // IT1-1452
         }
         
         context.restoreGState()
@@ -685,7 +695,7 @@ open class BarChartRenderer: BarLineScatterCandleBubbleRenderer
                 
                 setHighlightDrawPos(highlight: high, barRect: barRect)
                 
-                context.fill(barRect)
+                drawBarRect(context, barRect: barRect, buffer: nil, dataSet: set) // IT1-1452
             }
         }
         
@@ -697,4 +707,90 @@ open class BarChartRenderer: BarLineScatterCandleBubbleRenderer
     {
         high.setDraw(x: barRect.midX, y: barRect.origin.y)
     }
+    
+    /**
+     IT1-1452: Draw rectangle taking in account rounded corners property of BarChartData.
+     - Parameter barRect: Bar rectangle to draw on chart.
+     - Parameter buffer: Buffer from which bar rectangle comes.
+     - Parameter dataSet: Data set to get border width and color from.
+     - Parameter drawBorder: Whether to draw bar border if enabled by data set. By default **false**.
+     */
+    private func drawBarRect(_ context: CGContext, barRect: CGRect, buffer:Buffer?, dataSet: IBarChartDataSet, drawBorder:Bool = false)
+    {
+        let borderWidth = dataSet.barBorderWidth
+        let borderColor = dataSet.barBorderColor
+        let drawBorder  = borderWidth > 0.0
+        
+        var barPath: UIBezierPath?
+        var rounded = false
+        
+        // Determining bar position in stack.
+        // By default single bar assumed, e.g. bar shadow.
+        var firstInStack = true
+        var lastInStack  = true
+        if let index = buffer?.rects.index(of: barRect) {
+            firstInStack = buffer!.firstRectsIndexes.contains(index)
+            lastInStack = buffer!.lastRectsIndexes.contains(index)
+        }
+        
+        var finalBarRect = barRect
+        
+        // Modifying bar rectangle to add separator between stacked bars.
+        // Separator only rendered on non-first and non-empty bars of appropriate height.
+        let separatorHeight = CGFloat(dataProvider?.barData?.barSeparatorHeight ?? 0)
+        if !firstInStack && separatorHeight > 0 && barRect.height > separatorHeight {
+            finalBarRect.size.height -= separatorHeight;
+        }
+        
+        // Creating rounded bar path
+        let radius = dataProvider?.barData?.barCornerRadius ?? 0
+        if (radius > 0) {
+            rounded = true
+            var corners: UIRectCorner = UIRectCorner()
+            
+            // First item (bottom)
+            if (firstInStack) {
+                corners = corners.union(UIRectCorner.bottomLeft.union(UIRectCorner.bottomRight))
+            }
+            // Last item (top)
+            if (lastInStack) {
+                corners = corners.union(UIRectCorner.topLeft.union(UIRectCorner.topRight))
+            }
+            
+            barPath = UIBezierPath(roundedRect: finalBarRect,
+                                   byRoundingCorners:corners,
+                                   cornerRadii: CGSize(width:radius, height:radius))
+        }
+        
+        context.saveGState()
+        
+        // Drawing rounded bar
+        if rounded {
+            context.addPath(barPath!.cgPath);
+            context.fillPath()
+            
+            // Drawing simple bar
+        } else {
+            context.fill(finalBarRect)
+        }
+        
+        // Drawing bar border
+        if drawBorder {
+            context.setStrokeColor(borderColor.cgColor)
+            context.setLineWidth(borderWidth)
+            
+            // Rounded bar border
+            if rounded {
+                context.addPath(barPath!.cgPath);
+                context.strokePath()
+                
+                // Simple bar border
+            } else {
+                context.stroke(finalBarRect)
+            }
+        }
+        
+        context.restoreGState()
+    }
+    
 }
