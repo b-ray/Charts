@@ -350,7 +350,7 @@ open class BarChartRenderer: BarLineScatterCandleBubbleRenderer
         trans.rectValuesToPixel(&_buffers[index].rects)
 
         let borderWidth = dataSet.barBorderWidth
-        let borderColor = dataSet.barBorderColor
+//        let borderColor = dataSet.barBorderColor
         let drawBorder = borderWidth > 0.0
         
         context.saveGState()
@@ -939,7 +939,7 @@ open class BarChartRenderer: BarLineScatterCandleBubbleRenderer
         // By default single bar assumed, e.g. bar shadow.
         var firstInStack = true
         var lastInStack  = true
-        if let index = buffer?.rects.index(of: barRect) {
+        if let index = buffer?.rects.firstIndex(of: barRect) {
             firstInStack = buffer!.firstRectsIndexes.contains(index)
             lastInStack = buffer!.lastRectsIndexes.contains(index)
         }
